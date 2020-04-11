@@ -1,4 +1,4 @@
-redis_server = '192.168.1.254'
+redis_server = 'localhost'
 redis_port = 6379
 bot_token = 'Your_bot_token_here'
 bot_name = 'Your_Bot_Username_here'
@@ -28,3 +28,60 @@ helptext = '''**用法**
 /leave 退出当前加入的房间。
 __若房主退出，本房间自动关闭。__房主可以手动关闭房间，此时房间内所有人都会被移出。
 '''
+
+help_text_bindarc = '''用法：
+`/bindarc <Arcaea user code>`
+将你的 Telegram 账户与你的 Arcaea 账户绑定。'''
+
+help_text_rand = '''拿不准打什么歌？那就用这个抽抽看！支持十连哦！
+超 大 奖 池 抽 到 手 抽 筋 
+注意：按曲包抽歌一次只能抽一首。
+用法：
+`/roll pst|prs|ftr <连抽数>`
+`/roll 1-10 <连抽数>`
+`/roll <曲包> pst|prs|ftr`
+栗子： `/roll ftr`
+栗子： `/roll 9 10`
+栗子： `/roll chunithm ftr`
+'''
+
+help_text_aset = '''为歌曲添加一个别名。
+觉得歌曲/曲包 ID 比较难记？现在可以添加别名啦！
+别名也不允许包含空格哟
+用法： `/aset <歌曲 ID 或 曲包 ID> 别名1 别名2 ...`
+栗子： `/aset grievouslady 病女`
+栗子： `/aset yugamu 病女包`'''
+
+help_text_newmp = '''在当前群组新建一个房间。
+用法：
+/newmp 房间标题
+房间的 ID 是加入房间的唯一凭据。
+例：
+/newmp 出来Arc
+'''
+help_text_joinmp = '''加入一个当前群组的房间。
+用法：
+/joinmp 房间 ID
+'''
+
+recent_template = '''**{0}** 的最近一次成绩
+玩家 PTT：{1}
+谱面：{2}
+定数：{3}
+分数：{4}
+游玩表现：{5:.3f}
+Pure {6} (+{7})
+Far {8}
+Lost {9}
+上传时间：{10}
+Arcaea ID `{11}`
+'''
+
+mpinfo_template = '''房间信息 {0} ：
+房间标题：{1}
+创建者：{2}
+当前人数：{3}
+当前谱面：{4}
+状态：{5}
+'''
+
