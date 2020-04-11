@@ -564,7 +564,7 @@ def handle(cli, msg):
     uptime = subprocess.getoutput(uptime_command)
     loadavg = subprocess.getoutput(loadavg_command)
     freemem = subprocess.getoutput(freemem_command)
-    uptime = str(timedelta(seconds=int(uptime)))
+    uptime = str(timedelta(seconds=int(float(uptime))))
     delmsg(msg.reply(f'I\'m alive.\nUptime: `{uptime}`\nLoadavg: `{loadavg}`\nFree: `{freemem}`'), 30)
     delmsg(msg, 0)
 
