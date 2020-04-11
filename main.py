@@ -1,0 +1,637 @@
+#!/usr/bin/env python3
+from pyrogram import Client, Filters
+from datetime import datetime, timedelta
+from arcaea import *
+from config import *
+import logging
+import random
+from time import sleep, strftime
+from RedisClient import *
+import subprocess
+
+
+freemem_command = """free | awk 'FNR == 2 {print ($7/1048576)"GB / "($2/1048576)"GB" }'"""
+loadavg_command = 'cat /proc/loadavg | cut -d" " -f1-3'
+uptime_command = 'cat /proc/uptime | cut -d' ' -f1'
+diffindex = ['pst', 'prs', 'ftr']
+diffindex_full = ['Past', 'Present', 'Future']
+banned_userids = ['000000001', '000000002']
+help_text_bindarc = '''用法：
+`/bindarc <Arcaea user code>`
+将你的 Telegram 账户与你的 Arcaea 账户绑定。'''
+
+help_text_rand = '''拿不准打什么歌？那就用这个抽抽看！支持十连哦！
+超 大 奖 池 抽 到 手 抽 筋 
+注意：按曲包抽歌一次只能抽一首。
+用法：
+`/roll pst|prs|ftr <连抽数>`
+`/roll 1-10 <连抽数>`
+`/roll <曲包> pst|prs|ftr`
+栗子： `/roll ftr`
+栗子： `/roll 9 10`
+栗子： `/roll chunithm ftr`
+'''
+
+help_text_aset = '''为歌曲添加一个别名。
+觉得歌曲/曲包 ID 比较难记？现在可以添加别名啦！
+别名也不允许包含空格哟
+用法： `/aset <歌曲 ID 或 曲包 ID> 别名1 别名2 ...`
+栗子： `/aset grievouslady 病女`
+栗子： `/aset yugamu 病女包`'''
+
+help_text_newmp = '''在当前群组新建一个房间。
+用法：
+/newmp 房间标题
+房间的 ID 是加入房间的唯一凭据。
+例：
+/newmp 出来Arc
+'''
+help_text_joinmp = '''加入一个当前群组的房间。
+用法：
+/joinmp 房间 ID
+'''
+
+recent_template = '''**{0}** 的最近一次成绩
+玩家 PTT：{1}
+谱面：{2}
+定数：{3}
+分数：{4}
+游玩表现：{5:.3f}
+Pure {6} (+{7})
+Far {8}
+Lost {9}
+上传时间：{10}
+Arcaea ID `{11}`
+'''
+
+mpinfo_template = '''房间信息 {0} ：
+房间标题：{1}
+创建者：{2}
+当前人数：{3}
+当前谱面：{4}
+状态：{5}
+'''
+
+mplistener = Listener()
+bot = Client(
+    bot_name,
+    bot_token=bot_token
+)
+logger = logging.Logger('arcbot')
+
+
+def pickrandom(mode, filter, count=1, level=''):
+    chosen = []
+    if mode == 'diff':
+        diff = filter
+        while len(chosen) < count:
+            dup = False
+            song = random.choice(songlist)
+            for s in chosen:
+                if song['id'] == s[3]:
+                    dup = True
+            if not dup:
+                chosen.append([song['title_ja'] if song['title_ja'] else song['title'],
+                               diff, song['levels'][diffindex.index(diff)], song['id']])
+
+    elif mode == 'rating':
+        diff_list = []
+        rating = filter
+        for song in songlist:
+            if rating in song['levels']:
+                diff_list.append(song)
+        if len(diff_list) >= count:
+            while len(chosen) < count:
+                dup = False
+                song = random.choice(diff_list)
+                for s in chosen:
+                    if song['id'] == s[3]:
+                        dup = True
+                if not dup:
+                    chosen.append([song['title_ja'] if song['title_ja'] else song['title'],
+                                   diffindex[song['levels'].index(rating)], rating, song['id']])
+        else:
+            for i in range(0, count):
+                dup = False
+                song = random.choice(diff_list)
+                for s in chosen:
+                    if song['id'] == s[3]:
+                        dup = True
+                if not dup:
+                    chosen.append([song['title_ja'] if song['title_ja'] else song['title'],
+                                   diffindex[song['levels'].index(rating)], rating, song['id']])
+    elif mode == 'pack':
+        pack = filter
+        packsongs = []
+        for s in songlist:
+            if s['set'] == pack:
+                packsongs.append(s)
+        song = random.choice(packsongs)
+        chosen.append([song['title_ja'] if song['title_ja'] else song['title'],
+                       level.upper(), song['levels'][diffindex.index(level)], song['id']])
+    return chosen
+
+
+def curtime():
+    return int(datetime.now().timestamp())
+
+
+def onException(e):
+    print(e)
+
+
+def onAddmp(title, host, group, members=10):
+    ident = str(int(RedisClient.incr('lastid')))
+    mplistener.addmp(ident, host, title, members)
+    RedisClient.sadd('joined', host)
+    RedisClient.hset('joined_mp', host, ident)
+    RedisClient.sadd(f'mplist:{group}', str(mplistener.mplist[ident].id))
+    RedisClient.sadd(f'mplist:all', str(mplistener.mplist[ident].id))
+    RedisClient.hset('mpgroup', ident, group)
+    return ident
+
+
+def onJoinmp(ident, player):
+    mplistener.mplist[ident].add_member(player)
+    RedisClient.sadd('joined', player)
+    RedisClient.hset('joined_mp', player, ident)
+
+
+def onRemove(mp, user, reason):
+    pass
+
+
+def onClose(mp):
+    group = findGroupbymp(mp.id)
+    title = mp.title
+    creator = findArcName(mp.host)
+    bot.send_message(chat_id=group, text=f'{creator} 创建的房间 {mp.id} - {title} 已关闭。')
+    for m in mp.members:
+        RedisClient.srem('joined', m)
+        RedisClient.hdel('joined_mp', m)
+
+    RedisClient.srem(f'mplist:{group}', mp.id)
+    RedisClient.srem(f'mplist:all', mp.id)
+    RedisClient.hdel(f'mpgroup', mp.id)
+
+
+def findGroupbymp(ident):
+    res = RedisClient.hget('mpgroup', ident)
+    if res:
+        res = res.decode('utf-8')
+    return res
+
+
+def listmpingroup(group):
+    res = RedisClient.smembers(f'mplist:{group}')
+    if res:
+        decoded = []
+        for i in res:
+            decoded.append(i.decode('utf-8'))
+        return decoded
+    return res
+
+
+def mpinGroup(ident, group):
+    return RedisClient.sismember(f'mplist:{group}', str(ident))
+
+
+def mpexists(ident):
+    isexist = RedisClient.sismember('mplist:all', ident)
+    if not isexist:
+        return False
+    try:
+        mp = mplistener.mplist[ident]
+    except KeyError:
+        return False
+    if mplistener.mplist[ident].status != 'closed':
+        return True
+    else:
+        return False
+
+
+def onRmMember(group, ident, player):
+    RedisClient.srem('joined', player)
+    RedisClient.hdel('joined_mp', player)
+
+
+def isJoined(player):
+    return RedisClient.sismember('joined', player)
+
+
+def delmsg(msg, timeout=10):
+    sleep(timeout)
+    try:
+        msg.delete()
+    except:
+        pass
+
+
+def onBindArc(userid, arccode):
+    res = User_exists(arccode)
+    if res['status'] == 'ok':
+        RedisClient.hset('arcaea', userid, arccode)
+        RedisClient.hset('tguser', arccode, userid)
+        RedisClient.hset('arcuser', res['usercode'], res['username'])
+        RedisClient.hset('arcptt', res['usercode'], res['ptt'])
+        RedisClient.sadd('boundarc', arccode)
+        return res
+    else:
+        return res
+
+
+def findArc(tguser):
+    res = RedisClient.hget('arcaea', str(tguser))
+    if res:
+        res = res.decode('utf-8')
+    return res
+
+
+def findArcName(usercode):
+    res = RedisClient.hget('arcuser', usercode)
+    if res:
+        res = res.decode('utf-8')
+    return res
+
+
+def findSongName(songid):
+    for song in songlist:
+        if song['id'] == songid:
+            return song['title_ja'] if song['title_ja'] else song['title'], song['levels']
+
+
+def findPackName(packid):
+    for pack in packlist:
+        if pack['id'] == packid:
+            return pack['title']
+
+
+def set_songalias(song, alias):
+    RedisClient.hset('h_songaliases', alias, song)
+    RedisClient.sadd('hasaliases', song)
+    RedisClient.sadd(f'songaliases:{song}', alias)
+    RedisClient.sadd(f'songaliases:all', alias)
+
+
+def set_packalias(pack, alias):
+    RedisClient.hset('h_packaliases', alias, pack)
+    RedisClient.sadd('hasaliases', pack)
+    RedisClient.sadd('packaliases:all', alias)
+    RedisClient.sadd(f'packaliases:{pack}', alias)
+
+
+def hasalias(id):
+    return RedisClient.sismember('hasalias', id)
+
+
+def pull_packalias(pack=''):
+    decoded = []
+    if pack == '':
+        res = RedisClient.smembers('packaliases:all')
+    else:
+        res = RedisClient.smembers(f'packaliases:{pack}')
+    if res:
+        for i in res:
+            decoded.append(i.decode('utf-8'))
+        return decoded
+    return res
+
+
+def pull_songalias(song=''):
+    decoded = []
+    if song == '':
+        res = RedisClient.smembers('songaliases:all')
+    else:
+        res = RedisClient.smembers(f'songaliases:{song}')
+    if res:
+        for i in res:
+            decoded.append(i.decode('utf-8'))
+        return decoded
+    return res
+
+
+def getpackbyalias(alias=''):
+    res = RedisClient.hget('h_packaliases', alias)
+    if res:
+        res = res.decode('utf-8')
+    return res
+
+
+def getsongbyalias(alias=''):
+    res = RedisClient.hget('h_songaliases', alias)
+    if res:
+        res = res.decode('utf-8')
+    return res
+
+
+@bot.on_message(Filters.command(['aset', f'aset@{bot_name}']))
+def handler(cli, msg):
+    item = ''
+    mode = 'song'
+    if len(msg.command) == 1:
+        delmsg(msg.reply(help_text_aset))
+        delmsg(msg, timeout=1)
+        return
+    elif len(msg.command) < 3:
+        delmsg(msg.reply('信息量过小（'))
+        delmsg(msg, timeout=1)
+        return
+    elif msg.command[1].lower() in songs_by_id:
+        item = msg.command[1].lower()
+        mode = 'song'
+    elif msg.command[1].lower() in packid_list:
+        item = msg.command[1].lower()
+        mode = 'pack'
+    else:
+        delmsg(msg.reply('检查下歌曲/曲包 ID 是否正确呢？'))
+        delmsg(msg, timeout=0)
+        return
+    aliases = msg.command[2:]
+    name = ''
+    pstaliases = ''
+    if mode == 'song':
+        for alias in aliases:
+            set_songalias(item, alias.lower())
+        name = findSongName(item)
+        pstaliases = ' '.join(pull_songalias(item))
+    else:
+        for alias in aliases:
+            set_packalias(item, alias.lower())
+        name = findPackName(item)
+        pstaliases = ' '.join(pull_packalias(item))
+    delmsg(msg.reply(f'成功增加了 {name} 的别名\n现有的别名：\n{pstaliases}'), 15)
+    delmsg(msg, 0)
+
+
+@bot.on_message(Filters.command(['aget', f'aget@{bot_name}']))
+def handle(cli, msg):
+    if len(msg.command) != 2:
+        delmsg(msg.reply('请指定一个别名（'))
+        delmsg(msg)
+        return
+    ref = ''
+    other_aliases = ''
+    alias = msg.command[1].lower()
+    if RedisClient.sismember('songaliases:all', alias):
+        ref = getsongbyalias(alias)
+        name = findSongName(ref)[0]
+        other_aliases = ' '.join(pull_songalias(ref))
+        delmsg(msg.reply(f'它是歌曲 {name} 的别名。它的别名有：\n{other_aliases}'), 15)
+    elif RedisClient.sismember('packaliases:all', alias):
+        ref = getpackbyalias(alias)
+        name = findPackName(ref)
+        other_aliases = ' '.join(pull_packalias(ref))
+        delmsg(msg.reply(f'它是曲包 {name} 的别名。它的别名有：\n{other_aliases}'), 15)
+    delmsg(msg, 0)
+
+
+@bot.on_message(Filters.command(['newmp', f'newmp@{bot_name}']))
+def handler(client, msg):
+    if len(msg.command) < 2:
+        delmsg(msg.reply(help_text_newmp))
+        return
+    user = msg.from_user.id
+    if not findArc(user):
+        delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以创建房间（'))
+        return
+    if isJoined(findArc(user)):
+        delmsg(msg.reply('你已经加入了房间，所以不能创建新房间（'))
+        return
+    title = ' '.join(msg.command[1:])
+    group = str(msg.chat.id)
+    ident = onAddmp(title=title, group=group, host=findArc(user))
+    mplistener.mplist[ident].set_song('nhelv', 'ftr')
+    mp = mplistener.mplist[ident]
+    info = mpinfo_template.format(
+        mp.id, mp.title, findArcName(findArc(user)), len(mp.members),
+        f"{findSongName(mp.song_current)[0]} {diffindex[mp.diff_current].upper()}",
+        mp.status
+    )
+    mp.regcall('onClose', onClose)
+    msg.reply(f'房间创建成功，ID 为 {ident}\n{info}')
+
+
+@bot.on_message(Filters.command(['leave', f'leave@{bot_name}']))
+def handle(cli, msg):
+    user = msg.from_user.id
+    if not findArc(user):
+        delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以进行此操作（'))
+        return
+    arcid = findArc(user)
+    if not isJoined(arcid):
+        delmsg(msg.reply('你没有加入房间啊（'))
+        return
+    mpid = RedisClient.hget('joined_mp', arcid).decode('utf-8')
+    mplistener.mplist[mpid].rm_member(arcid)
+    delmsg(msg.reply(f'{findArcName(arcid)} 已退出房间 {mpid} {mplistener.mplist[mpid].title}，'
+                     f'剩余人数 {len(mplistener.mplist[mpid].members)}。'))
+    RedisClient.srem('joined', arcid)
+    RedisClient.hdel('joined_mp', arcid)
+
+
+@bot.on_message(Filters.command(['joinmp', f'joinmp@{bot_name}']))
+def handle(cli, msg):
+    if len(msg.command) < 2:
+        delmsg(msg.reply(help_text_joinmp))
+        return
+    user = msg.from_user.id
+    if not findArc(user):
+        delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以加入房间 :P'))
+        return
+    arcid = findArc(user)
+    if isJoined(arcid):
+        delmsg(msg.reply('你已经加入了某个房间 :P'))
+        return
+    ident = msg.command[1]
+    if not ident.isdigit():
+        delmsg(msg.reply('错误的房间 ID :('))
+        return
+    if not mpexists(ident):
+        delmsg(msg.reply('房间不存在或已关闭 :('))
+    mp = mplistener.mplist[ident]
+    onJoinmp(mp.id, arcid)
+    msg.reply(f'{findArcName(arcid)} 已加入房间 {mp.id} {mp.title} ，准备好接受挑战了吗？\n现有人数：{len(mp.members)}')
+    delmsg(msg, 0)
+
+
+@bot.on_message(Filters.command(['listmp', f'listmp@{bot_name}']))
+def handle(cli, msg):
+    group = msg.chat.id
+    mps = listmpingroup(group)
+    if not mps:
+        delmsg(msg.reply('当前群组内并没有房间 :(\n快使用 /newmp 创建一个吧！'))
+        return
+    list_text = ''
+    if len(mps) == 0:
+        delmsg(msg.reply('当前群组内并没有房间 :(\n快使用 /newmp 创建一个吧！'))
+        return
+    for mp in mps:
+        _mp = None
+        try:
+            _mp = mplistener.mplist[mp]
+            if _mp.status == 'closed':
+                continue
+        except KeyError:
+            continue
+        list_text += f'ID ：{_mp.id} 创建者：{findArcName(_mp.creator)} 人数：{len(_mp.members)}\n标题：{_mp.title}\n' \
+                     f'歌曲：{findSongName(_mp.cur_song()[0])} {diffindex[_mp.cur_song()[1]]}\n\n'
+    delmsg(msg.reply(f'本群组内的房间：\n{list_text}'), 60)
+    delmsg(msg, 0)
+
+
+@bot.on_message(Filters.command(['recent', f'recent@{bot_name}']))
+def handler(client, message):
+    userid = '0'
+    if message.reply_to_message is not None:
+        if findArc(message.reply_to_message.from_user.id) is not None:
+            userid = findArc(message.reply_to_message.from_user.id)
+        else:
+            delmsg(message.reply('这个用户还没有绑定 Arcaea 呢（'))
+            delmsg(msg=message, timeout=1)
+            return
+    elif findArc(message.from_user.id) is not None:
+        userid = findArc(message.from_user.id)
+    else:
+        delmsg(message.reply('貌似你还没有绑定到你的 Arcaea 账号哦~\n快使用 /bindarc 绑定你的 Arcaea 账号吧~'))
+        delmsg(message, 1)
+    try:
+        score = Score(userid)
+        message.reply(recent_template.format(
+            score.name, score.ptt, f'{findSongName(score.song_id)[0]} {diffindex[score.difficulty].upper()}',
+            score.const, score.score, score.rating,
+            score.counts[0], score.counts[1], score.counts[2], score.counts[3],
+            datetime.fromtimestamp(score.playtime / 1000), score.user
+        ))
+        RedisClient.hset('arcuser', score.user, score.name)
+        RedisClient.hset('arcptt', score.user, score.ptt)
+    except Exception as e:
+        delmsg(message.reply(f'请求数据失败了呢... >_<\n详细信息在下面：\n{e.__traceback__}\n{e}'))
+        delmsg(message, 1)
+        return
+
+
+@bot.on_message(Filters.command(['bindarc', f'bindarc@{bot_name}']))
+def handler(client, message):
+    if len(message.command) == 1:
+        delmsg(message.reply(help_text_bindarc))
+        return
+    if len(message.command) > 2:
+        message.reply(f'格式错误，你只需要输入 9 位数的 ID 即可')
+        return
+    try:
+        usercode = int(message.command[1], base=10)
+    except ValueError as e:
+        print(e)
+        message.reply(f'格式错误，请输入 9 位数 ID')
+        return
+    if len(message.command[1]) != 9:
+        print(f'Invalid ID {message.command[1]}')
+        message.reply('检查一下你的 ID 是不是填错了呢？')
+        return
+    tmpmsg = message.reply('咱的反射弧太长，在获取信息的过程中请稍候~')
+    try:
+        res = onBindArc(str(message.from_user.id), message.command[1])
+    except Exception as e:
+        delmsg(message.reply(f'请求数据失败了呢... >_<\n详细信息在下面：\n{e.__traceback__}\n{e}'))
+        delmsg(tmpmsg, 0)
+        return
+
+    if res['status'] == 'error':
+        print(f'Invalid ID F {message.command[1]}')
+        delmsg(message.reply('没有找到相关信息，检查一下你的 ID 是不是填错了呢？'))
+        delmsg(tmpmsg, 0)
+        return
+    else:
+        delmsg(message.reply(f"Arcaea {res['usercode']} ({res['username']}) 绑定成功。"))
+        delmsg(tmpmsg, 0)
+        delmsg(message, 0)
+
+
+@bot.on_message(Filters.command(['roll', f'roll@{bot_name}']))
+def handler(client, message):
+    if len(message.command) == 1:
+        message.reply(help_text_rand)
+        return
+    if len(message.command) <= 3:
+        picked = []
+        mode = 'diff'
+        filter = ''
+        song_str = ''
+        level = ''
+        count = 1
+        if message.command[1].lower() in ['pst', 'prs', 'ftr']:
+            mode = 'diff'
+            filter = message.command[1].lower()
+        elif message.command[1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '9+', '10']:
+            mode = 'rating'
+            filter = message.command[1]
+        elif message.command[1].lower() in packid_list:
+            if len(message.command) == 2:
+                message.reply('没有指定难度。\n从曲包中抽谱面只能抽一首歌！')
+                return
+            if message.command[2].lower() not in ['pst', 'prs', 'ftr']:
+                message.reply('错误的难度关键字（')
+                return
+            mode = 'pack'
+            filter = message.command[1].lower()
+            level = message.command[2].lower()
+        elif message.command[1].lower() in pull_packalias():
+            if len(message.command) == 2:
+                message.reply('没有指定难度。\n从曲包中抽谱面只能抽一首歌！')
+                return
+            if message.command[2].lower() not in ['pst', 'prs', 'ftr']:
+                message.reply('错误的难度关键字（')
+                return
+            mode = 'pack'
+            alias = message.command[1].lower()
+            filter = getpackbyalias(alias)
+            level = message.command[2].lower()
+        try:
+            if mode != 'pack':
+                count = int(message.command[2])
+        except IndexError:
+            count = 1
+        except ValueError:
+            delmsg(message.reply(f'格式错误'))
+            return
+        if count < 1:
+            message.reply('等等，这不是个正确的数哇...')
+            return
+        if count > 20:
+            message.reply('连抽数只能在 20 以内（')
+            return
+        picked = pickrandom(mode=mode, filter=filter, count=count, level=level)  # Randomly pick a song
+        for s in picked:
+            song_str += f'`{s[0]} {s[1].upper()}{s[2]}`\n'
+        message.reply(f'抽到的歌曲：\n{song_str}')
+        return
+    else:
+        message.reply(f'我从中找不到任何可以用于筛选谱面的条件（')
+
+
+@bot.on_message(Filters.command(['start', f'start@{bot_name}']))
+def handle(client, message):
+    message.reply('Hi there!')
+
+
+@bot.on_message(Filters.command(['ping', f'ping@{bot_name}']))
+def handle(cli, msg):
+    uptime = subprocess.getoutput(uptime_command)
+    loadavg = subprocess.getoutput(loadavg_command)
+    freemem = subprocess.getoutput(freemem_command)
+    uptime = str(timedelta(seconds=int(uptime)))
+    delmsg(msg.reply(f'I\'m alive.\nUptime: `{uptime}`\nLoadavg: `{loadavg}`\nFree: `{freemem}`'), 30)
+    delmsg(msg, 0)
+
+@bot.on_message(Filters.command(['howto', f'howto@{bot_name}']))
+def handle(client, message):
+    message.reply(helptext)
+
+
+def main():
+    mplistener.start()
+    bot.run()
+
+
+if __name__ == '__main__':
+    main()

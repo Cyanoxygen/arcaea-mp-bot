@@ -1,0 +1,3 @@
+[submodule "arcaea"]
+	path = arcaea
+	url = https://github.com/Cyanoxygen/arcaea-mp
