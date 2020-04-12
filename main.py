@@ -119,6 +119,9 @@ def onClose(mp):
     RedisClient.srem(f'mplist:all', mp.id)
     RedisClient.hdel(f'mpgroup', mp.id)
 
+def findmpbyuser(user):
+    return RedisClient.hget('joined_mp', arcid).decode('utf-8')
+
 
 def findGroupbymp(ident):
     res = RedisClient.hget('mpgroup', ident)
@@ -397,6 +400,21 @@ def handle(cli, msg):
     onJoinmp(mp.id, arcid)
     msg.reply(f'{findArcName(arcid)} 已加入房间 {mp.id} {mp.title} ，准备好接受挑战了吗？\n现有人数：{len(mp.members)}')
     delmsg(msg, 0)
+
+
+@bot.on_message(Filters.command(['chhost', f'chhost@{bot_name}']))
+def handler(cli, msg):
+    user = findArc(msg.from_user.id)
+    if not isJoined(user):
+        delmsg(msg.reply('你当前未加入任何房间。:('))
+        return
+    mpid = findmpbyuser(user)
+    mp = mplistener.mplist[mpid]
+    if user != mp.host: or user != mp.creator:
+        delmsg(msg.reply('你不是这个房间的房主或创建者，无法更改房间设置 :('))
+        return
+    mp.change_host(user)
+    delmsg(msg,0)
 
 
 @bot.on_message(Filters.command(['listmp', f'listmp@{bot_name}']))
