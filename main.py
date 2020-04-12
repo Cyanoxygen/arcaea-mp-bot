@@ -383,7 +383,7 @@ def handler_dump(cli, msg):
     if findArcbyUser(msg.from_user.id):
         user = findArcbyUser(msg.from_user.id)
         if isJoined(user):
-            mp = findmpbyuser(user)
+            mp = mplistener.mplist[findmpbyuser(user)]
             if user == mp.creator:
                 delmsg(msg.reply(f'`{mp.__repr__()}`'), 20)
 
