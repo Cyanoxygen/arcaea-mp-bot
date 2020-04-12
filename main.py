@@ -385,7 +385,7 @@ def handler_dump(cli, msg):
         if isJoined(user):
             mp = mplistener.mplist[findmpbyuser(user)]
             if user == mp.creator:
-                delmsg(msg.reply(f'`{mp.__repr__()}`'), 20)
+                delmsg(msg.reply(f'Info of {mp.id} :\n`{mp}`'), 20)
 
 
 @bot.on_message(Filters.command(['leave', f'leave@{bot_name}']))
