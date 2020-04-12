@@ -119,8 +119,19 @@ def onClose(mp):
     RedisClient.srem(f'mplist:all', mp.id)
     RedisClient.hdel(f'mpgroup', mp.id)
 
+
+def onHostChange(mp, past, present):
+    group = findGroupbymp(mp.id)
+    pastname = findArcName(past)
+    pstname = findArcName(present)
+    bot.send_message(chat_id=group, text=f'房间 {mp.id} "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。')
+
+
 def findmpbyuser(user):
-    return RedisClient.hget('joined_mp', arcid).decode('utf-8')
+    res = RedisClient.hget('joined_mp', user)
+    if res:
+        res = res.decode('utf-8')
+    return res
 
 
 def findGroupbymp(ident):
@@ -180,15 +191,22 @@ def onBindArc(userid, arccode):
     if res['status'] == 'ok':
         RedisClient.hset('arcaea', userid, arccode)
         RedisClient.hset('tguser', arccode, userid)
-        RedisClient.hset('arcuser', res['usercode'], res['username'])
+        RedisClient.hset('arcname', res['usercode'], res['username'])
+        RedisClient.hset('arcid', res['username'], res['usercode'])
         RedisClient.hset('arcptt', res['usercode'], res['ptt'])
         RedisClient.sadd('boundarc', arccode)
         return res
     else:
         return res
 
+def findArcbyName(name):
+    res = RedisClient.hget('arcid', name)
+    if res:
+        res = res.decode('utf-8')
+    return res
 
-def findArc(tguser):
+
+def findArcbyUser(tguser):
     res = RedisClient.hget('arcaea', str(tguser))
     if res:
         res = res.decode('utf-8')
@@ -196,7 +214,7 @@ def findArc(tguser):
 
 
 def findArcName(usercode):
-    res = RedisClient.hget('arcuser', usercode)
+    res = RedisClient.hget('arcname', usercode)
     if res:
         res = res.decode('utf-8')
     return res
@@ -339,19 +357,19 @@ def handler(client, msg):
         delmsg(msg.reply(help_text_newmp))
         return
     user = msg.from_user.id
-    if not findArc(user):
+    if not findArcbyUser(user):
         delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以创建房间（'))
         return
-    if isJoined(findArc(user)):
+    if isJoined(findArcbyUser(user)):
         delmsg(msg.reply('你已经加入了房间，所以不能创建新房间（'))
         return
     title = ' '.join(msg.command[1:])
     group = str(msg.chat.id)
-    ident = onAddmp(title=title, group=group, host=findArc(user))
+    ident = onAddmp(title=title, group=group, host=findArcbyUser(user))
     mplistener.mplist[ident].set_song('nhelv', 'ftr')
     mp = mplistener.mplist[ident]
     info = mpinfo_template.format(
-        mp.id, mp.title, findArcName(findArc(user)), len(mp.members),
+        mp.id, mp.title, findArcName(findArcbyUser(user)), len(mp.members),
         f"{findSongName(mp.song_current)[0]} {diffindex[mp.diff_current].upper()}",
         mp.status
     )
@@ -362,10 +380,10 @@ def handler(client, msg):
 @bot.on_message(Filters.command(['leave', f'leave@{bot_name}']))
 def handle(cli, msg):
     user = msg.from_user.id
-    if not findArc(user):
+    if not findArcbyUser(user):
         delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以进行此操作（'))
         return
-    arcid = findArc(user)
+    arcid = findArcbyUser(user)
     if not isJoined(arcid):
         delmsg(msg.reply('你没有加入房间啊（'))
         return
@@ -383,10 +401,10 @@ def handle(cli, msg):
         delmsg(msg.reply(help_text_joinmp))
         return
     user = msg.from_user.id
-    if not findArc(user):
+    if not findArcbyUser(user):
         delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以加入房间 :P'))
         return
-    arcid = findArc(user)
+    arcid = findArcbyUser(user)
     if isJoined(arcid):
         delmsg(msg.reply('你已经加入了某个房间 :P'))
         return
@@ -402,19 +420,29 @@ def handle(cli, msg):
     delmsg(msg, 0)
 
 
-@bot.on_message(Filters.command(['chhost', f'chhost@{bot_name}']))
+@bot.on_message(Filters.command(['host', f'host@{bot_name}']))
 def handler(cli, msg):
-    user = findArc(msg.from_user.id)
+    if len(msg.command) < 2:
+        delmsg(msg.reply(help_text_chhost))
+        return
+    user = findArcbyUser(msg.from_user.id)
     if not isJoined(user):
         delmsg(msg.reply('你当前未加入任何房间。:('))
         return
     mpid = findmpbyuser(user)
     mp = mplistener.mplist[mpid]
-    if user != mp.host: or user != mp.creator:
+    if user != mp.host or user != mp.creator:
         delmsg(msg.reply('你不是这个房间的房主或创建者，无法更改房间设置 :('))
         return
-    mp.change_host(user)
-    delmsg(msg,0)
+    name = msg.command[1]
+    user = findArcbyName(name)
+    if user:
+        if user in mp.members:
+            mp.change_host(user)
+            return
+    else:
+        delmsg(msg.reply('未找到该用户'))
+    delmsg(msg, 0)
 
 
 @bot.on_message(Filters.command(['listmp', f'listmp@{bot_name}']))
@@ -446,14 +474,14 @@ def handle(cli, msg):
 def handler(client, message):
     userid = '0'
     if message.reply_to_message is not None:
-        if findArc(message.reply_to_message.from_user.id) is not None:
-            userid = findArc(message.reply_to_message.from_user.id)
+        if findArcbyUser(message.reply_to_message.from_user.id) is not None:
+            userid = findArcbyUser(message.reply_to_message.from_user.id)
         else:
             delmsg(message.reply('这个用户还没有绑定 Arcaea 呢（'))
             delmsg(msg=message, timeout=1)
             return
-    elif findArc(message.from_user.id) is not None:
-        userid = findArc(message.from_user.id)
+    elif findArcbyUser(message.from_user.id) is not None:
+        userid = findArcbyUser(message.from_user.id)
     else:
         delmsg(message.reply('貌似你还没有绑定到你的 Arcaea 账号哦~\n快使用 /bindarc 绑定你的 Arcaea 账号吧~'))
         delmsg(message, 1)
@@ -465,7 +493,9 @@ def handler(client, message):
             score.counts[0], score.counts[1], score.counts[2], score.counts[3],
             datetime.fromtimestamp(score.playtime / 1000), score.user
         ))
-        RedisClient.hset('arcuser', score.user, score.name)
+        RedisClient.hdel('arcid', score.name)
+        RedisClient.hset('arcname', score.user, score.name)
+        RedisClient.hset('arcid', score.name, score.user)
         RedisClient.hset('arcptt', score.user, score.ptt)
     except Exception as e:
         delmsg(message.reply(f'请求数据失败了呢... >_<\n详细信息在下面：\n{e.__traceback__}\n{e}'))
