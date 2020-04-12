@@ -378,6 +378,16 @@ def handler_newmp(client, msg):
     msg.reply(f'房间创建成功，ID 为 {ident}\n{info}')
 
 
+@bot.on_message(Filters.command('dump'))    # Debug function
+def handler_dump(cli, msg):
+    if findArcbyUser(msg.from_user.id):
+        user = findArcbyUser(msg.from_user.id)
+        if isJoined(user):
+            mp = findmpbyuser(user)
+            if user == mp.creator:
+                delmsg(msg.reply(f'`{mp.__repr__()}`'), 20)
+
+
 @bot.on_message(Filters.command(['leave', f'leave@{bot_name}']))
 def handler_leave(cli, msg):
     user = msg.from_user.id
