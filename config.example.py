@@ -85,7 +85,7 @@ mpinfo_template = '''房间信息 {0} ：
 状态：{5}
 '''
 
-help_text_host = '''设置房间的房主。
+help_text_chhost = '''设置房间的房主。
 `/host <Arcaea Name>`
 只有房间的创建者或当前的房主才能设置房主；或者房主退出时自动轮换下一个玩家。
 

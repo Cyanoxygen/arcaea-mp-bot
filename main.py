@@ -109,7 +109,7 @@ def onRemove(mp, user, reason):
 def onClose(mp):
     group = findGroupbymp(mp.id)
     title = mp.title
-    creator = findArcName(mp.host)
+    creator = findArcName(mp.creator)
     bot.send_message(chat_id=group, text=f'{creator} 创建的房间 {mp.id} - {title} 已关闭。')
     for m in mp.members:
         RedisClient.srem('joined', m)
@@ -374,6 +374,7 @@ def handler(client, msg):
         mp.status
     )
     mp.regcall('onClose', onClose)
+    mp.regcall('onHostChange', onHostChange)
     msg.reply(f'房间创建成功，ID 为 {ident}\n{info}')
 
 
@@ -440,8 +441,10 @@ def handler(cli, msg):
         if user in mp.members:
             mp.change_host(user)
             return
+        else:
+            delmsg(msg.reply('该用户不在该房间内 :('))
     else:
-        delmsg(msg.reply('未找到该用户'))
+        delmsg(msg.reply('未找到该用户 :('))
     delmsg(msg, 0)
 
 
