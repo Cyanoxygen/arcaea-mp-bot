@@ -291,7 +291,7 @@ def getsongbyalias(alias=''):
 
 
 @bot.on_message(Filters.command(['aset', f'aset@{bot_name}']))
-def handler(cli, msg):
+def handler_aset(cli, msg):
     item = ''
     mode = 'song'
     if len(msg.command) == 1:
@@ -330,7 +330,7 @@ def handler(cli, msg):
 
 
 @bot.on_message(Filters.command(['aget', f'aget@{bot_name}']))
-def handle(cli, msg):
+def handler_aget(cli, msg):
     if len(msg.command) != 2:
         delmsg(msg.reply('请指定一个别名（'))
         delmsg(msg)
@@ -352,7 +352,7 @@ def handle(cli, msg):
 
 
 @bot.on_message(Filters.command(['newmp', f'newmp@{bot_name}']))
-def handler(client, msg):
+def handler_newmp(client, msg):
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_newmp))
         return
@@ -379,7 +379,7 @@ def handler(client, msg):
 
 
 @bot.on_message(Filters.command(['leave', f'leave@{bot_name}']))
-def handle(cli, msg):
+def handler_leave(cli, msg):
     user = msg.from_user.id
     if not findArcbyUser(user):
         delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以进行此操作（'))
@@ -397,7 +397,7 @@ def handle(cli, msg):
 
 
 @bot.on_message(Filters.command(['joinmp', f'joinmp@{bot_name}']))
-def handle(cli, msg):
+def handler_joinmp(cli, msg):
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_joinmp))
         return
@@ -422,7 +422,7 @@ def handle(cli, msg):
 
 
 @bot.on_message(Filters.command(['host', f'host@{bot_name}']))
-def handler(cli, msg):
+def handler_host(cli, msg):
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_chhost))
         return
@@ -449,7 +449,7 @@ def handler(cli, msg):
 
 
 @bot.on_message(Filters.command(['listmp', f'listmp@{bot_name}']))
-def handle(cli, msg):
+def handle_listmp(cli, msg):
     group = msg.chat.id
     mps = listmpingroup(group)
     if not mps:
@@ -474,7 +474,7 @@ def handle(cli, msg):
 
 
 @bot.on_message(Filters.command(['recent', f'recent@{bot_name}']))
-def handler(client, message):
+def handler_recent(client, message):
     userid = '0'
     if message.reply_to_message is not None:
         if findArcbyUser(message.reply_to_message.from_user.id) is not None:
@@ -507,7 +507,7 @@ def handler(client, message):
 
 
 @bot.on_message(Filters.command(['bindarc', f'bindarc@{bot_name}']))
-def handler(client, message):
+def handler_bindarc(client, message):
     if len(message.command) == 1:
         delmsg(message.reply(help_text_bindarc))
         return
@@ -544,7 +544,7 @@ def handler(client, message):
 
 
 @bot.on_message(Filters.command(['roll', f'roll@{bot_name}']))
-def handler(client, message):
+def handler_roll(client, message):
     if len(message.command) == 1:
         message.reply(help_text_rand)
         return
@@ -606,12 +606,12 @@ def handler(client, message):
 
 
 @bot.on_message(Filters.command(['start', f'start@{bot_name}']))
-def handle(client, message):
+def handler_start(client, message):
     message.reply('Hi there!')
 
 
 @bot.on_message(Filters.command(['ping', f'ping@{bot_name}']))
-def handle(cli, msg):
+def handler_ping(cli, msg):
     uptime = subprocess.getoutput(uptime_command)
     loadavg = subprocess.getoutput(loadavg_command)
     freemem = subprocess.getoutput(freemem_command)
@@ -620,7 +620,7 @@ def handle(cli, msg):
     delmsg(msg, 0)
 
 @bot.on_message(Filters.command(['howto', f'howto@{bot_name}']))
-def handle(client, message):
+def handle_howto(client, message):
     message.reply(helptext)
 
 
