@@ -92,7 +92,7 @@ def allowed_groups():
         for r in res:
             decoded.append(r.decode('utf-8'))
         return decoded
-    return res
+    return []
 
 def onAddmp(title, host, group, members=10):
     ident = str(int(RedisClient.incr('lastid')))
