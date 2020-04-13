@@ -123,7 +123,7 @@ def onRemove(mp, user, reason):
         reasontext = '错误的歌曲'
     RedisClient.srem('joined', user)
     RedisClient.hdel('joined_mp', user)
-    delmsg(bot.send_message(chat_id=group, text=f'{findArcName(user)} 已离开房间 {mp.id} "{mp.title}"。原因：{reasontext}'))
+    delmsg(bot.send_message(chat_id=group, text=f'{findArcName(user)} 已离开房间 {mp.id} "{mp.title}"。原因：{reasontext}'), 30)
 
 
 def onScoreComplete(mp: Multiplayer):
@@ -163,11 +163,11 @@ def onHostChange(mp, past, present):
     group = findGroupbymp(mp.id)
     pastname = findArcName(past)
     pstname = findArcName(present)
-    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。')
+    delmsg(bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。'), 30)
 
 def onStop(mp: Multiplayer):
     group = findGroupbymp(mp.id)
-    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 {mp.title} 的第 {mp.round_current} 轮对局结束了！请各位耐心等待结果喔~')
+    delmsg(bot.send_message(chat_id=group, text=f'{mp.id} 号房间 {mp.title} 的第 {mp.round_current} 轮对局结束了！请各位耐心等待结果喔~'), 30)
 
 
 def findmpbyuser(user):
@@ -505,9 +505,9 @@ def handler_next(cli, msg):
         return
     mp.nextround()
     cursong = mp.cur_song()
-    bot.send_message(chat_id=msg.chat.id, 
+    delmsg(bot.send_message(chat_id=msg.chat.id, 
                      text=f'房间 {mp.id} "{mp.title}" 的第 {mp.round_current} 轮已经开始了！'
-                          f'你们有 {threshold} 秒的时间游玩 {findSongName(cursong[0])[0]} {diffindex[cursong[1]]}。')
+                          f'你们有 {threshold} 秒的时间游玩 {findSongName(cursong[0])[0]} {diffindex[cursong[1]]}。'), 30)
 
 
 @bot.on_message(Filters.group & Filters.command(['joinmp', f'joinmp@{bot_name}']))
