@@ -121,9 +121,11 @@ def onRemove(mp, user, reason):
         reasontext = '错误的谱面难度'
     elif reason == 'invsongkick':
         reasontext = '错误的歌曲'
+    elif reason == 'closing':
+        reasontext == '房间已关闭'
     RedisClient.srem('joined', user)
     RedisClient.hdel('joined_mp', user)
-    delmsg(bot.send_message(chat_id=group, text=f'{findArcName(user)} 已离开房间 {mp.id} "{mp.title}"。原因：{reasontext}'), 30)
+    bot.send_message(chat_id=group, text=f'{findArcName(user)} 已离开房间 {mp.id} "{mp.title}"。原因：{reasontext}'), 30
 
 
 def onScoreComplete(mp: Multiplayer):
@@ -139,7 +141,7 @@ def onScoreComplete(mp: Multiplayer):
             emojilist.append('🎱')
     for score in scores:
         ranklist += scoreboard_peritem_tempate.format(
-            emojilist.pop(0), len(ranklist) + 1, score.name, score.score, score.rating, 
+            emojilist.pop(0), scores.index(score) + 1, score.name, score.score, score.rating, 
             score.counts[0], score.counts[1], score.counts[2], score.counts[3]
         )
     bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的第 {round} 轮对战结果：\n谱面：{beatmap}\n{ranklist}')
@@ -163,11 +165,11 @@ def onHostChange(mp, past, present):
     group = findGroupbymp(mp.id)
     pastname = findArcName(past)
     pstname = findArcName(present)
-    delmsg(bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。'), 30)
+    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。'), 30
 
 def onStop(mp: Multiplayer):
     group = findGroupbymp(mp.id)
-    delmsg(bot.send_message(chat_id=group, text=f'{mp.id} 号房间 {mp.title} 的第 {mp.round_current} 轮对局结束了！请各位耐心等待结果喔~'), 30)
+    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 {mp.title} 的第 {mp.round_current} 轮对局结束了！请各位耐心等待结果喔~'), 30
 
 
 def findmpbyuser(user):
@@ -508,6 +510,23 @@ def handler_next(cli, msg):
     delmsg(bot.send_message(chat_id=msg.chat.id, 
                      text=f'房间 {mp.id} "{mp.title}" 的第 {mp.round_current} 轮已经开始了！'
                           f'你们有 {threshold} 秒的时间游玩 {findSongName(cursong[0])[0]} {diffindex[cursong[1]]}。'), 30)
+
+
+@bot.on_message(Filters.group & Filters.command(['closemp', f'cosemp@{bot_name}']))
+def handler_next(cli, msg):
+    tguser = msg.from_user.id
+    arcuser = findArcbyUser(tguser)
+    if not arcuser:
+        delmsg(msg.reply('你还没有绑定你的 Arcaea 哟~\n快使用 /bindarc 绑定吧~'))
+        return
+    if not isJoined(arcuser):
+        delmsg(msg.reply('你没有加入房间 :('))
+        return
+    mp = mplistener.mplist[findmpbyuser(arcuser)]
+    if arcuser not in [mp.host, mp.creator]:
+        delmsg(msg.reply('你不是该房间的房主或创建者 :( '))
+        return
+    mp.close()
 
 
 @bot.on_message(Filters.group & Filters.command(['joinmp', f'joinmp@{bot_name}']))
