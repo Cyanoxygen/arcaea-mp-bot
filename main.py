@@ -442,7 +442,7 @@ def handler_leave(cli, msg):
     mplistener.mplist[mpid].rm_member(arcid)
     
 
-@bot.on_message(Filters.command['next', f'next@{bot_name}'])
+@bot.on_message(Filters.command(['next', f'next@{bot_name}']))
 def handler_next(cli, msg):
     tguser = msg.from_user.id
     arcuser = findArcbyUser(tguser)
