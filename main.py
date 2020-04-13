@@ -564,7 +564,7 @@ def handle_listmp(cli, msg):
         except KeyError:
             continue
         list_text += f'ID ：{_mp.id} 创建者：{findArcName(_mp.creator)} 人数：{len(_mp.members)}\n标题：{_mp.title}\n' \
-                     f'歌曲：{findSongName(_mp.cur_song()[0])} {diffindex[_mp.cur_song()[1]]}\n\n'
+                     f'歌曲：{findSongName(_mp.cur_song()[0])[0]} {diffindex[_mp.cur_song()[1]]}\n\n'
     delmsg(msg.reply(f'本群组内的房间：\n{list_text}'), 60)
     delmsg(msg, 0)
 
@@ -721,6 +721,8 @@ def handle_howto(client, message):
 
 
 def main():
+    # Clear database
+    RedisClient.delete(['mplist*', 'joined', 'joined_mp', 'mpgroup'])
     mplistener.start()
     bot.run()
 
