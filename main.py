@@ -722,7 +722,7 @@ def handle_howto(client, message):
 
 def main():
     # Clear database
-    RedisClient.delete(['mplist*', 'joined', 'joined_mp', 'mpgroup'])
+    RedisClient.delete('mplist*', 'joined', 'joined_mp', 'mpgroup')
     mplistener.start()
     bot.run()
 
