@@ -411,6 +411,29 @@ def handler_aget(cli, msg):
     delmsg(msg, 0)
 
 
+@bot.on_message(Filters.group & Filters.command(['mpinfo', f'mpinfo@{bot_name}']))
+def handle_mpinfo(cli, msg):
+    user = msg.from_user.id
+    arcid = findArcbyUser(user)
+    if not arcid: 
+        delmsg(msg.reply('必须先使用 /bindarc 绑定你的 Arcaea 才可以加入房间（'))
+        delmsg(msg)
+        return
+    if not isJoined(arcid):
+        delmsg(msg.reply('你没有加入房间（'))
+        delmsg(msg)
+        return
+    mp = mplistener.mplist[findmpbyuser(arcid)]
+    members = ''
+    for m in mp.members:
+        members += findArcName(m)
+    cursong = mp.cur_song()
+    delmsg(msg.reply(mpinfo_detailed_template.format(
+        mp.id, mp.title, findArcName(mp.creator), findArcName(mp.host), f'{findSongName(cursong[0])[0]} {diffindex[cursong[1]]}',
+        mp.round_current, mp.status, members
+    )), 20)
+
+
 @bot.on_message(Filters.group & Filters.command(['newmp', f'newmp@{bot_name}']))
 def handler_newmp(client, msg):
     if len(msg.command) < 2:
@@ -515,6 +538,10 @@ def handler_joinmp(cli, msg):
         delmsg(msg, 0)
         return
     mp = mplistener.mplist[ident]
+    if mp.status != 'idle':
+        delmsg(msg.reply('该房间正在游戏中，不能加入 :('))
+        delmsg(msg, 0)
+        return
     onJoinmp(mp.id, arcid)
     msg.reply(f'{findArcName(arcid)} 已加入 {mp.id} 号房间 {mp.title} ，准备好接受挑战了吗？\n现有人数：{len(mp.members)}')
     delmsg(msg, 0)
