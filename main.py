@@ -226,6 +226,15 @@ def findSongName(songid):
             return song['title_ja'] if song['title_ja'] else song['title'], song['levels']
 
 
+def findSongbyAny(query):
+    if query in pull_songalias():
+        return getsongbyalias(query)
+    elif query in songs_by_id:
+        return query
+    else:
+         return None
+
+
 def findPackName(packid):
     for pack in packlist:
         if pack['id'] == packid:
@@ -368,9 +377,10 @@ def handler_newmp(client, msg):
     ident = onAddmp(title=title, group=group, host=findArcbyUser(user))
     mplistener.mplist[ident].set_song('nhelv', 'ftr')
     mp = mplistener.mplist[ident]
+    cursong = mp.cur_song()
     info = mpinfo_template.format(
         mp.id, mp.title, findArcName(findArcbyUser(user)), len(mp.members),
-        f"{findSongName(mp.song_current)[0]} {diffindex[mp.diff_current].upper()}",
+        f"{findSongName(cursong[0])} {diffindex[cursong[1]].upper()}",
         mp.status
     )
     mp.regcall('onClose', onClose)
@@ -442,7 +452,7 @@ def handler_host(cli, msg):
         return
     mpid = findmpbyuser(user)
     mp = mplistener.mplist[mpid]
-    if user != mp.host or user != mp.creator:
+    if user not in (mp.host, mp.creator):
         delmsg(msg.reply('你不是这个房间的房主或创建者，无法更改房间设置 :('))
         return
     name = msg.command[1]
@@ -456,6 +466,35 @@ def handler_host(cli, msg):
     else:
         delmsg(msg.reply('未找到该用户 :('))
     delmsg(msg, 0)
+
+
+@bot.on_message(Filters.command(['song', f'song@{bot_name}']))
+def handler_song(cli, msg):
+    if len(msg.command) < 2:
+        delmsg(msg.reply(help_text_song))
+        return
+    tguser = msg.from_user.id
+    arcuser = findArcbyUser(tguser)
+    diff = 'prs'
+    song = ''
+    if not arcuser:
+        delmsg(msg.reply('你还没有绑定你的 Arcaea 哟~\n快使用 /bindarc 绑定吧~'))
+        return
+    if not isJoined(arcuser):
+        delmsg(msg.reply('你没有加入房间 :('))
+        return
+    mp = mplistener.mplist[findmpbyuser(arcuser)]
+    if arcuser not in [mp.host, mp.creator]:
+        delmsg(msg.reply('你不是该房间的房主或创建者 :( '))
+        return
+    song = findSongbyAny(msg.command[1].lower())
+    if not song:
+        delmsg(msg.reply('找不到该谱面 :('))
+        return
+    if msg.command[2].lower() in diffindex:
+        diff = msg.command[2].lower()
+    mp.set_song(song, diff)
+    delmsg(msg.reply(f'房间 {mp.id} {mp.title} 的歌曲设置为 {findSongName(song)} {diff.upper()}'))
 
 
 @bot.on_message(Filters.command(['listmp', f'listmp@{bot_name}']))
