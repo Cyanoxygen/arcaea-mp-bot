@@ -96,7 +96,7 @@ ID      ：{0}
 '''
 
 scoreboard_peritem_tempate = '''{0} **第 {1} 名**
-{} 分数：{} 定数：{} Pure/Far/Lost: {} {} {}
+{2} 分数：{3} 定数：{4:3f} Pure/Far/Lost: {5} (+{6}) {7} {8}
 -----
 '''
 
