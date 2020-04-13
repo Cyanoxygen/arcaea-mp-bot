@@ -103,7 +103,35 @@ def onJoinmp(ident, player):
 
 
 def onRemove(mp, user, reason):
-    pass
+    group = findGroupbymp(mp.id)
+    username = findArcName(user)
+    reasontext = '其他原因'
+    if reason == '':
+        reasontext = '主动退出'
+    if reason == 'invdiffkick':
+        reasontext = '错误的谱面难度'
+    elif reason == 'invsongkick':
+        reasontext = '错误的歌曲'
+    RedisClient.srem('joined', user)
+    RedisClient.hdel('joined_mp', user)
+    delmsg(bot.send_message(chat_id=group, text=f'{findArcName(user)} 已离开房间 {mp.id} "{mp.title}"。原因：{reasontext}'))
+
+
+def onScoreComplete(mp: Multiplayer):
+    round = mp.round_current
+    group = findGroupbymp(mp.id)
+    ranklist = ''
+    emojilist = ['🥇', '🥈', '🥉', ]
+    scores = mp.scores[f'round_{round}']
+    if len(scores) > 3:
+        for i in scores[3:]:
+            emojilist.append('🎱')
+    for score in scores:
+        ranklist += (scoreboard_peritem_tempate.format(
+            emojilist.pop(0), len(ranklist) + 1, score.name, score.score, score.rating, 
+            score.counts[0], score.counts[1], score.counts[2], score.counts[3]
+        ))
+    bot.send_message(chat_id=group, text=f'房间 {mp.id} "{mp.title}" 的第 {round} 轮对战结果：\n{ranklist}')
 
 
 def onClose(mp):
@@ -380,11 +408,13 @@ def handler_newmp(client, msg):
     cursong = mp.cur_song()
     info = mpinfo_template.format(
         mp.id, mp.title, findArcName(findArcbyUser(user)), len(mp.members),
-        f"{findSongName(cursong[0])} {diffindex[cursong[1]].upper()}",
+        f"{findSongName(cursong[0])[0]} {diffindex[cursong[1]].upper()}",
         mp.status
     )
     mp.regcall('onClose', onClose)
     mp.regcall('onHostChange', onHostChange)
+    mp.regcall('onScoreComplete', onScoreComplete)
+    mp.regcall('onRemove', onRemove)
     msg.reply(f'房间创建成功，ID 为 {ident}\n{info}')
 
 
@@ -410,10 +440,27 @@ def handler_leave(cli, msg):
         return
     mpid = RedisClient.hget('joined_mp', arcid).decode('utf-8')
     mplistener.mplist[mpid].rm_member(arcid)
-    RedisClient.srem('joined', arcid)
-    RedisClient.hdel('joined_mp', arcid)
-    delmsg(msg.reply(f'{findArcName(arcid)} 已退出房间 {mpid} {mplistener.mplist[mpid].title}，'
-                     f'剩余人数 {len(mplistener.mplist[mpid].members)}。'))
+    
+
+@bot.on_message(Filters.command['next', f'next@{bot_name}'])
+def handler_next(cli, msg):
+    tguser = msg.from_user.id
+    arcuser = findArcbyUser(tguser)
+    if not arcuser:
+        delmsg(msg.reply('你还没有绑定你的 Arcaea 哟~\n快使用 /bindarc 绑定吧~'))
+        return
+    if not isJoined(arcuser):
+        delmsg(msg.reply('你没有加入房间 :('))
+        return
+    mp = mplistener.mplist[findmpbyuser(arcuser)]
+    if arcuser not in [mp.host, mp.creator]:
+        delmsg(msg.reply('你不是该房间的房主或创建者 :( '))
+        return
+    mp.nextround()
+    cursong = mp.cur_song()
+    delmsg(bot.send_message(chat_id=msg.chat.id, 
+                            text=f'房间 {mp.id} "{mp.title}" 的第 {mp.round_current} 轮已经开始了！'
+                                 f'你们有 200 秒的时间游玩 {findSongName(cursong[0])[0]} {diffindex[cursong[1]]}。'))
 
 
 @bot.on_message(Filters.command(['joinmp', f'joinmp@{bot_name}']))
