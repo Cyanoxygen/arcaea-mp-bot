@@ -127,10 +127,10 @@ def onScoreComplete(mp: Multiplayer):
         for i in scores[3:]:
             emojilist.append('🎱')
     for score in scores:
-        ranklist += (scoreboard_peritem_tempate.format(
+        ranklist += scoreboard_peritem_tempate.format(
             emojilist.pop(0), len(ranklist) + 1, score.name, score.score, score.rating, 
             score.counts[0], score.counts[1], score.counts[2], score.counts[3]
-        ))
+        )
     bot.send_message(chat_id=group, text=f'房间 {mp.id} "{mp.title}" 的第 {round} 轮对战结果：\n{ranklist}')
 
 
