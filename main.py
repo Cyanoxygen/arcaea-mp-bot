@@ -781,14 +781,14 @@ def handle_howto(client, message):
 
 @bot.on_message(Filters.private & Filters.command('listgrps'))
 def handler_m_listgrps(cli, msg):
-    if msg.from_user.id != bot_master_id:
+    if str(msg.from_user.id) != bot_master_id:
         return
     msg.reply(f'Allowed groups:\n{allowed_groups()}')
 
 
 @bot.on_message(Filters.private & Filters.command('addgrp'))
 def handler_m_addgrp(cli, msg):
-    if msg.from_user.id != bot_master_id:
+    if str(msg.from_user.id) != bot_master_id:
         return
     if msg.command.__len__() > 1:
         grps = msg.command[1:]
@@ -799,7 +799,7 @@ def handler_m_addgrp(cli, msg):
 
 @bot.on_message(Filters.private & Filters.command('remgrp'))
 def handler_m_remgrp(cli, msg):
-    if msg.from_user.id != bot_master_id:
+    if str(msg.from_user.id) != bot_master_id:
         return
     if msg.command.__len__() > 1:
         grps = msg.command[1:]
