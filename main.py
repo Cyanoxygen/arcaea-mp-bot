@@ -410,10 +410,10 @@ def handler_leave(cli, msg):
         return
     mpid = RedisClient.hget('joined_mp', arcid).decode('utf-8')
     mplistener.mplist[mpid].rm_member(arcid)
-    delmsg(msg.reply(f'{findArcName(arcid)} 已退出房间 {mpid} {mplistener.mplist[mpid].title}，'
-                     f'剩余人数 {len(mplistener.mplist[mpid].members)}。'))
     RedisClient.srem('joined', arcid)
     RedisClient.hdel('joined_mp', arcid)
+    delmsg(msg.reply(f'{findArcName(arcid)} 已退出房间 {mpid} {mplistener.mplist[mpid].title}，'
+                     f'剩余人数 {len(mplistener.mplist[mpid].members)}。'))
 
 
 @bot.on_message(Filters.command(['joinmp', f'joinmp@{bot_name}']))
