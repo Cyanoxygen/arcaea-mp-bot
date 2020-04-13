@@ -2,6 +2,7 @@ redis_server = 'localhost'
 redis_port = 6379
 bot_token = 'Your_bot_token_here'
 bot_name = 'Your_Bot_Username_here'
+bot_master_id = 'Your ID here, neither Username nor Name'
 helptext = '''**用法**
 **请在游玩之前将你的 Arcaea 账户与你的 Telegram 进行绑定。**
 大致步骤如下：

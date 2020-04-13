@@ -85,6 +85,15 @@ def onException(e):
     print(e)
 
 
+def allowed_groups():
+    decoded = []
+    res = RedisClient.smembers('allowed_groups')
+    if res:
+        for r in res:
+            decoded.append(r.decode('utf-8'))
+        return decoded
+    return res
+
 def onAddmp(title, host, group, members=10):
     ident = str(int(RedisClient.incr('lastid')))
     mplistener.addmp(ident, host, title, members)
@@ -331,6 +340,14 @@ def getsongbyalias(alias=''):
     if res:
         res = res.decode('utf-8')
     return res
+
+
+@bot.on_message(Filters.group & Filters.new_chat_members, group=0)
+def handler_grpcheck(cli, msg):
+    if msg.chat.id not in allowed_groups():
+        bot.send_message(chat_id=msg.chat.id, text='我没有主人允许不能在这里工作，请联系主人来获得允许吧~')
+        bot.send_message(chat_id=bot_master_id, text=f'群组 {msg.chat.title} ({msg.chat.id}) 将我拉入群组。')
+        bot.leave_chat(chat_id=msg.chat.id)
 
 
 @bot.on_message(Filters.command(['aset', f'aset@{bot_name}']))
@@ -727,12 +744,35 @@ def handler_ping(cli, msg):
     loadavg = subprocess.getoutput(loadavg_command)
     freemem = subprocess.getoutput(freemem_command)
     uptime = str(timedelta(seconds=int(float(uptime))))
-    delmsg(msg.reply(f'I\'m alive.\nUptime: `{uptime}`\nLoadavg: `{loadavg}`\nFree: `{freemem}`'), 30)
+    delmsg(msg.reply(f'I\'m alive.\nYour ID:`{msg.from_user.id}`\nChat ID:{msg.chat.id}\nUptime: `{uptime}`\nLoadavg: `{loadavg}`\nFree: `{freemem}`'), 30)
     delmsg(msg, 0)
 
 @bot.on_message(Filters.command(['howto', f'howto@{bot_name}']))
 def handle_howto(client, message):
     message.reply(helptext)
+
+
+@bot.on_message(Filters.private & Filters.user(bot_master_id) & Filters.command('listgrps'))
+def handler_m_listgrps(cli, msg):
+    msg.reply(f'Allowed groups:\n{allowed_groups()}')
+
+
+@bot.on_message(Filters.private & Filters.user(bot_master_id) & Filters.command('addgrp'))
+def handler_m_addgrp(cli, msg):
+    if msg.command.__len__() > 1:
+        grps = msg.command[1:]
+        for grp in grps:
+            RedisClient.sadd('allowed_groups', grp)
+        msg.reply(f'{grps} was added into allowed groups.')
+
+
+@bot.on_message(Filters.private & Filters.user(bot_master_id) & Filters.command('remgrp'))
+def handler_m_remgrp(cli, msg):
+    if msg.command.__len__() > 1:
+        grps = msg.command[1:]
+        for grp in grps:
+            RedisClient.srem('allowed_groups', grp)
+        msg.reply(f'{grps} was removed from allowed groups.')
 
 
 def main():
