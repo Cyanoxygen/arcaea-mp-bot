@@ -426,13 +426,13 @@ def handle_mpinfo(cli, msg):
         delmsg(msg)
         return
     mp = mplistener.mplist[findmpbyuser(arcid)]
-    members = ''
+    members = []
     for m in mp.members:
-        members += findArcName(m)
+        members.append(findArcName(m))
     cursong = mp.cur_song()
     delmsg(msg.reply(mpinfo_detailed_template.format(
         mp.id, mp.title, findArcName(mp.creator), findArcName(mp.host), f'{findSongName(cursong[0])[0]} {diffindex[cursong[1]]}',
-        mp.round_current, mp.status, members
+        mp.round_current, mp.status, ', '.join(members)
     )), 20)
 
 
