@@ -123,6 +123,8 @@ def onScoreComplete(mp: Multiplayer):
     ranklist = ''
     emojilist = ['🥇', '🥈', '🥉', ]
     scores = mp.scores[f'round_{round}']
+    cursong = mp.cur_song()
+    beatmap = f'{findSongName(cursong[0])[0]} {diffindex[cursong[1]].upper()}'
     if len(scores) > 3:
         for i in scores[3:]:
             emojilist.append('🎱')
@@ -131,7 +133,7 @@ def onScoreComplete(mp: Multiplayer):
             emojilist.pop(0), len(ranklist) + 1, score.name, score.score, score.rating, 
             score.counts[0], score.counts[1], score.counts[2], score.counts[3]
         )
-    bot.send_message(chat_id=group, text=f'房间 {mp.id} "{mp.title}" 的第 {round} 轮对战结果：\n{ranklist}')
+    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的第 {round} 轮对战结果：\n谱面：{beatmap}\n{ranklist}')
 
 
 def onClose(mp):
@@ -152,7 +154,11 @@ def onHostChange(mp, past, present):
     group = findGroupbymp(mp.id)
     pastname = findArcName(past)
     pstname = findArcName(present)
-    bot.send_message(chat_id=group, text=f'房间 {mp.id} "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。')
+    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 "{mp.title}" 的房主由 {pastname} 更改为 {pstname}。')
+
+def onStop(mp: Multiplayer):
+    group = findGroupbymp(mp.id)
+    bot.send_message(chat_id=group, text=f'{mp.id} 号房间 {mp.title} 的第 {mp.round_current} 轮对局结束了！请各位耐心等待结果喔~')
 
 
 def findmpbyuser(user):
@@ -388,7 +394,7 @@ def handler_aget(cli, msg):
     delmsg(msg, 0)
 
 
-@bot.on_message(Filters.command(['newmp', f'newmp@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['newmp', f'newmp@{bot_name}']))
 def handler_newmp(client, msg):
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_newmp))
@@ -415,10 +421,11 @@ def handler_newmp(client, msg):
     mp.regcall('onHostChange', onHostChange)
     mp.regcall('onScoreComplete', onScoreComplete)
     mp.regcall('onRemove', onRemove)
+    mp.regcall('onStop', onStop)
     msg.reply(f'房间创建成功，ID 为 {ident}\n{info}')
 
 
-@bot.on_message(Filters.command('dump'))    # Debug function
+@bot.on_message(Filters.group & Filters.command('dump'))    # Debug function
 def handler_dump(cli, msg):
     if findArcbyUser(msg.from_user.id):
         user = findArcbyUser(msg.from_user.id)
@@ -428,7 +435,7 @@ def handler_dump(cli, msg):
                 delmsg(msg.reply(f'Info of {mp.id} :\n`{mp}`'), 20)
 
 
-@bot.on_message(Filters.command(['leave', f'leave@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['leave', f'leave@{bot_name}']))
 def handler_leave(cli, msg):
     user = msg.from_user.id
     if not findArcbyUser(user):
@@ -442,7 +449,7 @@ def handler_leave(cli, msg):
     mplistener.mplist[mpid].rm_member(arcid)
     
 
-@bot.on_message(Filters.command(['next', f'next@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['next', f'next@{bot_name}']))
 def handler_next(cli, msg):
     tguser = msg.from_user.id
     arcuser = findArcbyUser(tguser)
@@ -458,13 +465,14 @@ def handler_next(cli, msg):
         return
     mp.nextround()
     cursong = mp.cur_song()
-    delmsg(bot.send_message(chat_id=msg.chat.id, 
-                            text=f'房间 {mp.id} "{mp.title}" 的第 {mp.round_current} 轮已经开始了！'
-                                 f'你们有 200 秒的时间游玩 {findSongName(cursong[0])[0]} {diffindex[cursong[1]]}。'))
+    bot.send_message(chat_id=msg.chat.id, 
+                     text=f'房间 {mp.id} "{mp.title}" 的第 {mp.round_current} 轮已经开始了！'
+                          f'你们有 {threshold} 秒的时间游玩 {findSongName(cursong[0])[0]} {diffindex[cursong[1]]}。')
 
 
-@bot.on_message(Filters.command(['joinmp', f'joinmp@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['joinmp', f'joinmp@{bot_name}']))
 def handler_joinmp(cli, msg):
+    group = msg.chat.id
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_joinmp))
         return
@@ -475,6 +483,7 @@ def handler_joinmp(cli, msg):
     arcid = findArcbyUser(user)
     if isJoined(arcid):
         delmsg(msg.reply('你已经加入了某个房间 :P'))
+        delmsg(msg, 0)
         return
     ident = msg.command[1]
     if not ident.isdigit():
@@ -482,13 +491,19 @@ def handler_joinmp(cli, msg):
         return
     if not mpexists(ident):
         delmsg(msg.reply('房间不存在或已关闭 :('))
+        delmsg(msg, 0)
+        return
+    if not mpinGroup(ident, group):
+        delmsg(msg.reply('该房间不在本群组内 :('))
+        delmsg(msg, 0)
+        return
     mp = mplistener.mplist[ident]
     onJoinmp(mp.id, arcid)
-    msg.reply(f'{findArcName(arcid)} 已加入房间 {mp.id} {mp.title} ，准备好接受挑战了吗？\n现有人数：{len(mp.members)}')
+    msg.reply(f'{findArcName(arcid)} 已加入 {mp.id} 号房间 {mp.title} ，准备好接受挑战了吗？\n现有人数：{len(mp.members)}')
     delmsg(msg, 0)
 
 
-@bot.on_message(Filters.command(['host', f'host@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['host', f'host@{bot_name}']))
 def handler_host(cli, msg):
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_chhost))
@@ -515,7 +530,7 @@ def handler_host(cli, msg):
     delmsg(msg, 0)
 
 
-@bot.on_message(Filters.command(['song', f'song@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['song', f'song@{bot_name}']))
 def handler_song(cli, msg):
     if len(msg.command) < 2:
         delmsg(msg.reply(help_text_song))
@@ -541,10 +556,10 @@ def handler_song(cli, msg):
     if msg.command[2].lower() in diffindex:
         diff = msg.command[2].lower()
     mp.set_song(song, diff)
-    delmsg(msg.reply(f'房间 {mp.id} {mp.title} 的歌曲设置为 {findSongName(song)} {diff.upper()}'))
+    delmsg(msg.reply(f'房间 {mp.id} {mp.title} 的歌曲设置为 {findSongName(song)[0]} {diff.upper()}'))
 
 
-@bot.on_message(Filters.command(['listmp', f'listmp@{bot_name}']))
+@bot.on_message(Filters.group & Filters.command(['listmp', f'listmp@{bot_name}']))
 def handle_listmp(cli, msg):
     group = msg.chat.id
     mps = listmpingroup(group)

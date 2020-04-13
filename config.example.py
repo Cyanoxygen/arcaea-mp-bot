@@ -96,8 +96,8 @@ ID      ：{0}
 '''
 
 scoreboard_peritem_tempate = '''{0} **第 {1} 名**
-{2} 分数：{3} 定数：{4:3f} Pure/Far/Lost: {5} (+{6}) {7} {8}
------
+{2} 分数：{3} 定数：{4:3f} Pure {5} (+{6}) Far {7} Lost {8}
+
 '''
 
 help_text_chhost = '''设置房间的房主。
