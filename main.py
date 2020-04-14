@@ -346,7 +346,7 @@ def getsongbyalias(alias=''):
 
 @bot.on_message(Filters.group & Filters.new_chat_members, group=0)
 def handler_grpcheck(cli, msg):
-    if msg.chat.id not in allowed_groups():
+    if str(msg.chat.id) not in allowed_groups():
         bot.send_message(chat_id=msg.chat.id, text='我没有主人允许不能在这里工作，请联系主人来获得允许吧~')
         bot.send_message(chat_id=bot_master_id, text=f'群组 {msg.chat.title} ({msg.chat.id}) 将我拉入群组。')
         bot.leave_chat(chat_id=msg.chat.id)
