@@ -1,4 +1,4 @@
 # Arcaea Multiplayer Bot
 
-TODO: Write README
+Archived, pending refactor
 
